@@ -1,5 +1,16 @@
 # Agentic Fabric development: SAP ingestion demo
 
+> [!WARNING]
+> **For demonstration only. Not intended for production use.**
+>
+> This repository is a sample for learning and evaluation. It is provided "as is", without warranty or support of any kind, and is not an official Microsoft product or sample. Use it only in a dedicated, non-production Fabric workspace with the synthetic data included here. Before you reuse any part of it, review and test it against your organization's security, compliance and operational requirements.
+>
+> In particular:
+> - **The AI agent acts with the permissions of the signed-in identity.** Give that identity access to a DEV workspace only, never to test or production.
+> - **The pipelines, scripts and MCP configuration are not hardened for production.** Error handling, monitoring, secret management, CI/CD and scale testing are out of scope.
+> - **Running the demo consumes Fabric capacity** and can incur costs. Pause the capacity when you are done.
+> - **All data is synthetic and the company is fictional.** Do not load real, personal or confidential data.
+
 This repo is a ready-to-use workspace for building Microsoft Fabric Data Factory pipelines with GitHub Copilot in VS Code, using the Fabric MCP server and the Fabric skills. The scenario is a metadata-driven ingestion framework that loads SAP S/4HANA tables from a landing area into bronze Delta tables, controlled by a Fabric Warehouse. The company (Contoso Drilling Systems) and all data are fictional and synthetic.
 
 The question the demo answers: can an agent build pipelines that open in Fabric and have the right connections? It can, if it reads the real workspace state through a read-only MCP server, follows written standards and validated patterns, and may change only a DEV workspace.
