@@ -1,0 +1,239 @@
+{
+  "properties": {
+    "description": "Bronze child: loads one SAP object from its landing partition (CSV) into the bronze Delta table and logs start/end events in wh_control.",
+    "activities": [
+      {
+        "name": "Log run start",
+        "description": "Insert a Started event into ctl.run_log.",
+        "type": "SqlServerStoredProcedure",
+        "dependsOn": [],
+        "policy": {
+          "timeout": "0.00:10:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "storedProcedureName": "[ctl].[usp_log_run_start]",
+          "storedProcedureParameters": {
+            "pipeline_run_id": { "value": { "value": "@pipeline().RunId", "type": "Expression" }, "type": "String" },
+            "parent_run_id": { "value": { "value": "@pipeline().parameters.p_parent_run_id", "type": "Expression" }, "type": "String" },
+            "pipeline_name": { "value": "pl_bronze_sap_child", "type": "String" },
+            "source_system": { "value": { "value": "@pipeline().parameters.p_source_system", "type": "Expression" }, "type": "String" },
+            "source_object": { "value": { "value": "@pipeline().parameters.p_source_object", "type": "Expression" }, "type": "String" },
+            "load_date": { "value": { "value": "@pipeline().parameters.p_load_date", "type": "Expression" }, "type": "String" }
+          }
+        },
+        "linkedService": {
+          "name": "wh_control",
+          "objectId": "{{warehouse.id}}",
+          "properties": {
+            "annotations": [],
+            "type": "DataWarehouse",
+            "typeProperties": {
+              "endpoint": "{{warehouse.connectionString}}",
+              "artifactId": "{{warehouse.id}}",
+              "workspaceId": "{{workspace.id}}"
+            }
+          }
+        }
+      },
+      {
+        "name": "Copy landing to bronze",
+        "description": "Copy all CSV files of the landing partition into the bronze table (Overwrite for FULL, Append for INCREMENTAL) and add lineage columns.",
+        "type": "Copy",
+        "dependsOn": [
+          { "activity": "Log run start", "dependencyConditions": [ "Succeeded" ] }
+        ],
+        "policy": {
+          "timeout": "0.01:00:00",
+          "retry": 1,
+          "retryIntervalInSeconds": 60,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "source": {
+            "type": "DelimitedTextSource",
+            "additionalColumns": [
+              { "name": "_LOAD_DATE", "value": { "value": "@pipeline().parameters.p_load_date", "type": "Expression" } },
+              { "name": "_SOURCE_FILE", "value": "$$FILEPATH" },
+              { "name": "_PIPELINE_RUN_ID", "value": { "value": "@pipeline().RunId", "type": "Expression" } }
+            ],
+            "storeSettings": {
+              "type": "LakehouseReadSettings",
+              "recursive": true,
+              "wildcardFileName": "*.csv",
+              "enablePartitionDiscovery": false
+            },
+            "formatSettings": { "type": "DelimitedTextReadSettings" },
+            "datasetSettings": {
+              "annotations": [],
+              "linkedService": {
+                "name": "lh_bronze",
+                "properties": {
+                  "annotations": [],
+                  "type": "Lakehouse",
+                  "typeProperties": {
+                    "workspaceId": "{{workspace.id}}",
+                    "artifactId": "{{lakehouse.id}}",
+                    "rootFolder": "Files"
+                  }
+                }
+              },
+              "type": "DelimitedText",
+              "typeProperties": {
+                "location": {
+                  "type": "LakehouseLocation",
+                  "folderPath": { "value": "@pipeline().parameters.p_landing_path", "type": "Expression" }
+                },
+                "columnDelimiter": ",",
+                "escapeChar": "\\",
+                "firstRowAsHeader": true,
+                "quoteChar": "\""
+              },
+              "schema": []
+            }
+          },
+          "sink": {
+            "type": "LakehouseTableSink",
+            "tableActionOption": { "value": "@pipeline().parameters.p_table_action", "type": "Expression" },
+            "partitionOption": "None",
+            "datasetSettings": {
+              "annotations": [],
+              "linkedService": {
+                "name": "lh_bronze",
+                "properties": {
+                  "annotations": [],
+                  "type": "Lakehouse",
+                  "typeProperties": {
+                    "workspaceId": "{{workspace.id}}",
+                    "artifactId": "{{lakehouse.id}}",
+                    "rootFolder": "Tables"
+                  }
+                }
+              },
+              "type": "LakehouseTable",
+              "schema": [],
+              "typeProperties": {
+                "table": { "value": "@pipeline().parameters.p_target_table", "type": "Expression" }
+              }
+            }
+          },
+          "enableStaging": false,
+          "translator": {
+            "type": "TabularTranslator",
+            "typeConversion": true,
+            "typeConversionSettings": { "allowDataTruncation": true, "treatBooleanAsNumber": false }
+          }
+        }
+      },
+      {
+        "name": "Log run end - succeeded",
+        "description": "Insert a Succeeded event and a watermark row.",
+        "type": "SqlServerStoredProcedure",
+        "dependsOn": [
+          { "activity": "Copy landing to bronze", "dependencyConditions": [ "Succeeded" ] }
+        ],
+        "policy": {
+          "timeout": "0.00:10:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "storedProcedureName": "[ctl].[usp_log_run_end]",
+          "storedProcedureParameters": {
+            "pipeline_run_id": { "value": { "value": "@pipeline().RunId", "type": "Expression" }, "type": "String" },
+            "pipeline_name": { "value": "pl_bronze_sap_child", "type": "String" },
+            "source_system": { "value": { "value": "@pipeline().parameters.p_source_system", "type": "Expression" }, "type": "String" },
+            "source_object": { "value": { "value": "@pipeline().parameters.p_source_object", "type": "Expression" }, "type": "String" },
+            "load_date": { "value": { "value": "@pipeline().parameters.p_load_date", "type": "Expression" }, "type": "String" },
+            "status": { "value": "Succeeded", "type": "String" },
+            "rows_copied": { "value": { "value": "@activity('Copy landing to bronze').output.rowsCopied", "type": "Expression" }, "type": "Int64" }
+          }
+        },
+        "linkedService": {
+          "name": "wh_control",
+          "objectId": "{{warehouse.id}}",
+          "properties": {
+            "annotations": [],
+            "type": "DataWarehouse",
+            "typeProperties": {
+              "endpoint": "{{warehouse.connectionString}}",
+              "artifactId": "{{warehouse.id}}",
+              "workspaceId": "{{workspace.id}}"
+            }
+          }
+        }
+      },
+      {
+        "name": "Log run end - failed",
+        "description": "Insert a Failed event with the copy error message.",
+        "type": "SqlServerStoredProcedure",
+        "dependsOn": [
+          { "activity": "Copy landing to bronze", "dependencyConditions": [ "Failed" ] }
+        ],
+        "policy": {
+          "timeout": "0.00:10:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "storedProcedureName": "[ctl].[usp_log_run_end]",
+          "storedProcedureParameters": {
+            "pipeline_run_id": { "value": { "value": "@pipeline().RunId", "type": "Expression" }, "type": "String" },
+            "pipeline_name": { "value": "pl_bronze_sap_child", "type": "String" },
+            "source_system": { "value": { "value": "@pipeline().parameters.p_source_system", "type": "Expression" }, "type": "String" },
+            "source_object": { "value": { "value": "@pipeline().parameters.p_source_object", "type": "Expression" }, "type": "String" },
+            "load_date": { "value": { "value": "@pipeline().parameters.p_load_date", "type": "Expression" }, "type": "String" },
+            "status": { "value": "Failed", "type": "String" },
+            "error_message": { "value": { "value": "@activity('Copy landing to bronze').error.message", "type": "Expression" }, "type": "String" }
+          }
+        },
+        "linkedService": {
+          "name": "wh_control",
+          "objectId": "{{warehouse.id}}",
+          "properties": {
+            "annotations": [],
+            "type": "DataWarehouse",
+            "typeProperties": {
+              "endpoint": "{{warehouse.connectionString}}",
+              "artifactId": "{{warehouse.id}}",
+              "workspaceId": "{{workspace.id}}"
+            }
+          }
+        }
+      },
+      {
+        "name": "Fail pipeline",
+        "description": "Surface the failure to the master pipeline after it has been logged.",
+        "type": "Fail",
+        "dependsOn": [
+          { "activity": "Log run end - failed", "dependencyConditions": [ "Succeeded" ] }
+        ],
+        "typeProperties": {
+          "message": {
+            "value": "@concat('Bronze load failed for ', pipeline().parameters.p_source_object, ' (', pipeline().parameters.p_load_date, '): ', activity('Copy landing to bronze').error.message)",
+            "type": "Expression"
+          },
+          "errorCode": "BRONZE_LOAD_FAILED"
+        }
+      }
+    ],
+    "parameters": {
+      "p_source_system": { "type": "string", "defaultValue": "SAP_S4" },
+      "p_source_object": { "type": "string", "defaultValue": "T001W" },
+      "p_landing_path": { "type": "string", "defaultValue": "landing/sap_s4/T001W/load_date=2026-11-12" },
+      "p_target_table": { "type": "string", "defaultValue": "sap_s4_t001w" },
+      "p_table_action": { "type": "string", "defaultValue": "Overwrite" },
+      "p_load_date": { "type": "string", "defaultValue": "2026-11-12" },
+      "p_parent_run_id": { "type": "string", "defaultValue": "" }
+    },
+    "annotations": []
+  }
+}

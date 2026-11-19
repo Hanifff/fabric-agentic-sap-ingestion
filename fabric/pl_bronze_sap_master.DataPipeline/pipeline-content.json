@@ -1,0 +1,109 @@
+{
+  "properties": {
+    "description": "Bronze master: reads the objects to load from wh_control (ctl.usp_get_objects_to_load) and runs pl_bronze_sap_child for each object in parallel.",
+    "activities": [
+      {
+        "name": "Set load date",
+        "description": "Use p_load_date, or yesterday (UTC) when empty.",
+        "type": "SetVariable",
+        "dependsOn": [],
+        "policy": { "secureOutput": false, "secureInput": false },
+        "typeProperties": {
+          "variableName": "v_load_date",
+          "value": {
+            "value": "@if(empty(pipeline().parameters.p_load_date), formatDateTime(addDays(utcNow(), -1), 'yyyy-MM-dd'), pipeline().parameters.p_load_date)",
+            "type": "Expression"
+          }
+        }
+      },
+      {
+        "name": "Get objects to load",
+        "description": "Active objects for the load group; incremental objects already loaded for this date are skipped.",
+        "type": "Lookup",
+        "dependsOn": [
+          { "activity": "Set load date", "dependencyConditions": [ "Succeeded" ] }
+        ],
+        "policy": {
+          "timeout": "0.00:10:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 30,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "source": {
+            "type": "DataWarehouseSource",
+            "sqlReaderStoredProcedureName": "[ctl].[usp_get_objects_to_load]",
+            "storedProcedureParameters": {
+              "load_group": { "type": "String", "value": { "value": "@pipeline().parameters.p_load_group", "type": "Expression" } },
+              "load_date": { "type": "String", "value": { "value": "@variables('v_load_date')", "type": "Expression" } }
+            },
+            "queryTimeout": "02:00:00",
+            "partitionOption": "None"
+          },
+          "firstRowOnly": false,
+          "datasetSettings": {
+            "annotations": [],
+            "linkedService": {
+              "name": "wh_control",
+              "objectId": "{{warehouse.id}}",
+              "properties": {
+                "annotations": [],
+                "type": "DataWarehouse",
+                "typeProperties": {
+                  "endpoint": "{{warehouse.connectionString}}",
+                  "artifactId": "{{warehouse.id}}",
+                  "workspaceId": "{{workspace.id}}"
+                }
+              }
+            },
+            "type": "DataWarehouseTable",
+            "schema": [],
+            "typeProperties": {}
+          }
+        }
+      },
+      {
+        "name": "For each object",
+        "type": "ForEach",
+        "dependsOn": [
+          { "activity": "Get objects to load", "dependencyConditions": [ "Succeeded" ] }
+        ],
+        "typeProperties": {
+          "items": { "value": "@activity('Get objects to load').output.value", "type": "Expression" },
+          "isSequential": false,
+          "batchCount": 4,
+          "activities": [
+            {
+              "name": "Load object to bronze",
+              "type": "ExecutePipeline",
+              "dependsOn": [],
+              "policy": { "secureInput": false },
+              "typeProperties": {
+                "pipeline": { "referenceName": "{{item:pl_bronze_sap_child}}", "type": "PipelineReference" },
+                "waitOnCompletion": true,
+                "parameters": {
+                  "p_source_system": { "value": "@item().source_system", "type": "Expression" },
+                  "p_source_object": { "value": "@item().source_object", "type": "Expression" },
+                  "p_landing_path": { "value": "@item().landing_path", "type": "Expression" },
+                  "p_target_table": { "value": "@item().target_table", "type": "Expression" },
+                  "p_table_action": { "value": "@item().table_action", "type": "Expression" },
+                  "p_load_date": { "value": "@item().load_date", "type": "Expression" },
+                  "p_parent_run_id": { "value": "@pipeline().RunId", "type": "Expression" }
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "parameters": {
+      "p_load_group": { "type": "string", "defaultValue": "ALL" },
+      "p_load_date": { "type": "string", "defaultValue": "" }
+    },
+    "variables": {
+      "v_load_date": { "type": "String" }
+    },
+    "annotations": []
+  }
+}
