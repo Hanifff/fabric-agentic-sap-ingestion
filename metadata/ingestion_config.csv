@@ -1,0 +1,11 @@
+source_system,source_object,object_description,load_group,load_type,business_key,watermark_column,landing_folder,target_table,priority,is_active
+SAP_S4,T001W,Plants,SAP_MASTERDATA,FULL,"MANDT,WERKS",,landing/sap_s4/T001W,sap_s4_t001w,10,1
+SAP_S4,MARA,Material master - general data,SAP_MASTERDATA,FULL,"MANDT,MATNR",,landing/sap_s4/MARA,sap_s4_mara,10,1
+SAP_S4,MAKT,Material descriptions,SAP_MASTERDATA,FULL,"MANDT,MATNR,SPRAS",,landing/sap_s4/MAKT,sap_s4_makt,20,1
+SAP_S4,LFA1,Supplier master - general data,SAP_MASTERDATA,FULL,"MANDT,LIFNR",,landing/sap_s4/LFA1,sap_s4_lfa1,10,1
+SAP_S4,KNA1,Customer master - general data,SAP_MASTERDATA,FULL,"MANDT,KUNNR",,landing/sap_s4/KNA1,sap_s4_kna1,10,1
+SAP_S4,EKKO,Purchasing document header,SAP_TRANSACTIONS,INCREMENTAL,"MANDT,EBELN",load_date,landing/sap_s4/EKKO,sap_s4_ekko,30,1
+SAP_S4,EKPO,Purchasing document item,SAP_TRANSACTIONS,INCREMENTAL,"MANDT,EBELN,EBELP",load_date,landing/sap_s4/EKPO,sap_s4_ekpo,30,1
+SAP_S4,VBAK,Sales document header,SAP_TRANSACTIONS,INCREMENTAL,"MANDT,VBELN",load_date,landing/sap_s4/VBAK,sap_s4_vbak,30,1
+SAP_S4,VBAP,Sales document item,SAP_TRANSACTIONS,INCREMENTAL,"MANDT,VBELN,POSNR",load_date,landing/sap_s4/VBAP,sap_s4_vbap,30,1
+SAP_S4,MATDOC,Material document (goods movements),SAP_TRANSACTIONS,INCREMENTAL,"MANDT,MBLNR,MJAHR,ZEILE",load_date,landing/sap_s4/MATDOC,sap_s4_matdoc,40,1

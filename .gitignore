@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+*.log
+.DS_Store
+*.local.json
+# Written by 'scripts/fabric_env.py provision' for your own tenant. Commit it only in a private copy.
+environment/fabric-environment.json
+.vscode/settings.json
+.vscode/tasks.json

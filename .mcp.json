@@ -1,0 +1,44 @@
+{
+  "mcpServers": {
+    "fabricReadOnly": {
+      "type": "stdio",
+      "command": "dnx",
+      "args": [
+        "Microsoft.Fabric.Mcp@1.8.0", "--yes", "--",
+        "server", "start", "--mode", "all", "--read-only",
+        "--namespace", "core", "--namespace", "onelake", "--namespace", "jobs",
+        "--namespace", "datafactory", "--namespace", "docs"
+      ],
+      "env": { "AZURE_TOKEN_CREDENTIALS": "AzureCliCredential" },
+      "tools": ["*"]
+    },
+    "fabricDevWrite": {
+      "type": "stdio",
+      "command": "dnx",
+      "args": [
+        "Microsoft.Fabric.Mcp@1.8.0", "--yes", "--",
+        "server", "start", "--mode", "all",
+        "--tool", "core_create-item",
+        "--tool", "core_get-item-definition",
+        "--tool", "core_update-item-definition",
+        "--tool", "jobs_run-on-demand-item-job",
+        "--tool", "jobs_get-item-job-instance",
+        "--tool", "jobs_cancel-item-job-instance"
+      ],
+      "env": { "AZURE_TOKEN_CREDENTIALS": "AzureCliCredential" },
+      "tools": [
+        "core_create-item",
+        "core_get-item-definition",
+        "core_update-item-definition",
+        "jobs_run-on-demand-item-job",
+        "jobs_get-item-job-instance",
+        "jobs_cancel-item-job-instance"
+      ]
+    },
+    "microsoftLearn": {
+      "type": "http",
+      "url": "https://learn.microsoft.com/api/mcp",
+      "tools": ["*"]
+    }
+  }
+}

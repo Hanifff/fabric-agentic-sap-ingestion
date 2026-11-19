@@ -1,0 +1,83 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "Logic App (Consumption) that suspends Fabric capacities daily at 15:00 and 22:00 UTC (16:00 and 23:00 CET) if they are Active. Uses its system-assigned managed identity; grant it a role on each capacity."
+  },
+  "parameters": {
+    "workflowName": { "type": "string", "defaultValue": "la-fabric-capacity-autopause" },
+    "location": { "type": "string", "defaultValue": "[resourceGroup().location]" },
+    "capacityIds": { "type": "array", "metadata": { "description": "ARM resource IDs of the Fabric capacities to suspend." } },
+    "scheduleHoursUtc": { "type": "array", "defaultValue": [ 15, 22 ] }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('workflowName')]",
+      "location": "[parameters('location')]",
+      "identity": { "type": "SystemAssigned" },
+      "tags": { "purpose": "fabric-capacity-autopause" },
+      "properties": {
+        "state": "Enabled",
+        "parameters": { "capacityIds": { "value": "[parameters('capacityIds')]" } },
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": { "capacityIds": { "type": "Array", "defaultValue": [] } },
+          "triggers": {
+            "Recurrence": {
+              "type": "Recurrence",
+              "recurrence": {
+                "frequency": "Day",
+                "interval": 1,
+                "timeZone": "UTC",
+                "schedule": { "hours": "[parameters('scheduleHoursUtc')]", "minutes": [ 0 ] }
+              }
+            }
+          },
+          "actions": {
+            "For_each_capacity": {
+              "type": "Foreach",
+              "foreach": "@parameters('capacityIds')",
+              "runtimeConfiguration": { "concurrency": { "repetitions": 1 } },
+              "actions": {
+                "Get_capacity": {
+                  "type": "Http",
+                  "inputs": {
+                    "method": "GET",
+                    "uri": "@{concat('https://management.azure.com', item(), '?api-version=2023-11-01')}",
+                    "authentication": { "type": "ManagedServiceIdentity", "audience": "https://management.azure.com/" }
+                  }
+                },
+                "If_active": {
+                  "type": "If",
+                  "runAfter": { "Get_capacity": [ "Succeeded" ] },
+                  "expression": { "and": [ { "equals": [ "@body('Get_capacity')?['properties']?['state']", "Active" ] } ] },
+                  "actions": {
+                    "Suspend_capacity": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "POST",
+                        "uri": "@{concat('https://management.azure.com', item(), '/suspend?api-version=2023-11-01')}",
+                        "authentication": { "type": "ManagedServiceIdentity", "audience": "https://management.azure.com/" }
+                      }
+                    }
+                  },
+                  "else": { "actions": {} }
+                }
+              }
+            }
+          },
+          "outputs": {}
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "principalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('workflowName')), '2019-05-01', 'full').identity.principalId]"
+    }
+  }
+}
